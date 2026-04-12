@@ -950,7 +950,6 @@ async fn load_idiomatic_filenames(dirs: &[PathBuf]) -> BTreeMap<String, Vec<Stri
     let mut jset = JoinSet::new();
     for tool in backend::list() {
         let enable_tools = enable_tools.clone();
-        let use_fallback = use_fallback;
         jset.spawn(async move {
             if !use_fallback && !enable_tools.contains(tool.id()) {
                 return vec![];

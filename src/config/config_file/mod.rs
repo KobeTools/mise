@@ -557,6 +557,14 @@ async fn filename_is_idiomatic(file_name: String) -> Option<Vec<Arc<dyn Backend>
     }
 }
 
+fn is_known_mise_toml_path(path: &Path) -> bool {
+    config::is_global_config(path)
+        || config::DEFAULT_CONFIG_FILENAMES
+            .iter()
+            .filter(|filename| filename.ends_with(".toml"))
+            .any(|filename| path.ends_with(Path::new(filename)))
+}
+
 async fn detect_config_file_type(path: &Path) -> Option<ConfigFileType> {
     match path
         .file_name()
@@ -574,13 +582,10 @@ async fn detect_config_file_type(path: &Path) -> Option<ConfigFileType> {
         }
         f if env::MISE_OVERRIDE_CONFIG_FILENAMES.contains(f) => Some(ConfigFileType::MiseToml),
         f if env::MISE_DEFAULT_CONFIG_FILENAME.as_str() == f => Some(ConfigFileType::MiseToml),
-        f => {
-            if let Some(backends) = filename_is_idiomatic(f.to_string()).await {
-                Some(ConfigFileType::IdiomaticVersion(backends))
-            } else {
-                None
-            }
-        }
+        _ if is_known_mise_toml_path(path) => Some(ConfigFileType::MiseToml),
+        f => filename_is_idiomatic(f.to_string())
+            .await
+            .map(ConfigFileType::IdiomaticVersion),
     }
 }
 
@@ -636,6 +641,10 @@ mod tests {
         );
         assert_eq!(
             detect_config_file_type(Path::new("/foo/bar/.test.mise.toml")).await,
+            Some(ConfigFileType::MiseToml)
+        );
+        assert_eq!(
+            detect_config_file_type(&env::MISE_GLOBAL_CONFIG_FILE.clone().unwrap()).await,
             Some(ConfigFileType::MiseToml)
         );
         assert!(matches!(
