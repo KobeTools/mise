@@ -47,6 +47,7 @@ pub enum SettingsType {
 pub struct SettingsMeta {
     // pub key: String,
     pub type_: SettingsType,
+    pub rc: bool,
     pub description: &'static str,
     pub deprecated: Option<&'static str>,
     pub deprecated_warn_at: Option<&'static str>,

@@ -1,9 +1,12 @@
 use eyre::{Result, bail, eyre};
+use std::path::PathBuf;
 use toml_edit::DocumentMut;
 
-use crate::config::settings::{SETTINGS_META, SettingsFile, SettingsType, parse_url_replacements};
+use crate::config::settings::{
+    MisercSettings, SETTINGS_META, SettingsFile, SettingsMeta, SettingsType, parse_url_replacements,
+};
 use crate::toml::dedup_toml_array;
-use crate::{config, duration, file};
+use crate::{config, dirs, duration, file};
 
 /// Add/update a setting
 ///
@@ -59,48 +62,68 @@ pub fn set(mut key: &str, value: &str, add: bool, local: bool) -> Result<()> {
         SettingsType::BoolOrString => parse_bool(value).unwrap_or_else(|_| value.into()),
     };
 
-    let path = if local {
-        config::local_toml_config_path()
-    } else {
-        config::global_config_path()
-    };
+    let path = settings_path(meta, local)?;
     file::create_dir_all(path.parent().unwrap())?;
     let raw = file::read_to_string(&path).unwrap_or_default();
     let mut config: DocumentMut = raw.parse()?;
-    if !config.contains_key("settings") {
-        config["settings"] = toml_edit::Item::Table(toml_edit::Table::new());
-    }
-    if let Some(mut settings) = config["settings"].as_table_mut() {
-        if let Some((parent_key, child_key)) = key.split_once('.') {
-            key = child_key;
-            settings = settings
-                .entry(parent_key)
-                .or_insert({
-                    let mut t = toml_edit::Table::new();
-                    t.set_implicit(true);
-                    toml_edit::Item::Table(t)
-                })
-                .as_table_mut()
-                .unwrap();
+    let mut settings = if meta.rc {
+        config.as_table_mut()
+    } else {
+        if !config.contains_key("settings") {
+            config["settings"] = toml_edit::Item::Table(toml_edit::Table::new());
         }
+        config["settings"].as_table_mut().unwrap()
+    };
+    if let Some((parent_key, child_key)) = key.split_once('.') {
+        key = child_key;
+        settings = settings
+            .entry(parent_key)
+            .or_insert({
+                let mut t = toml_edit::Table::new();
+                t.set_implicit(true);
+                toml_edit::Item::Table(t)
+            })
+            .as_table_mut()
+            .unwrap();
+    }
 
-        let value = match settings.get(key).map(|c| c.as_array()) {
-            Some(Some(array)) if add => {
-                let mut new_array = array.clone();
-                new_array.extend(value.as_array().unwrap().iter().cloned());
-                match meta.type_ {
-                    SettingsType::SetString => dedup_toml_array(&new_array).into(),
-                    _ => new_array.into(),
-                }
+    let value = match settings.get(key).map(|c| c.as_array()) {
+        Some(Some(array)) if add => {
+            let mut new_array = array.clone();
+            new_array.extend(value.as_array().unwrap().iter().cloned());
+            match meta.type_ {
+                SettingsType::SetString => dedup_toml_array(&new_array).into(),
+                _ => new_array.into(),
             }
-            _ => value,
-        };
-        settings.insert(key, value.into());
+        }
+        _ => value,
+    };
+    settings.insert(key, value.into());
 
-        // validate
-        let _: SettingsFile = toml::from_str(&config.to_string())?;
+    validate_settings_document(meta, &config.to_string())?;
+    file::write(path, config.to_string())?;
+    Ok(())
+}
 
-        file::write(path, config.to_string())?;
+pub fn settings_path(meta: &SettingsMeta, local: bool) -> Result<PathBuf> {
+    if meta.rc {
+        if local {
+            Ok(std::env::current_dir()?.join(".miserc.toml"))
+        } else {
+            Ok(dirs::CONFIG.join("miserc.toml"))
+        }
+    } else if local {
+        Ok(config::local_toml_config_path())
+    } else {
+        Ok(config::global_config_path())
+    }
+}
+
+pub fn validate_settings_document(meta: &SettingsMeta, raw: &str) -> Result<()> {
+    if meta.rc {
+        let _: MisercSettings = toml::from_str(raw)?;
+    } else {
+        let _: SettingsFile = toml::from_str(raw)?;
     }
     Ok(())
 }

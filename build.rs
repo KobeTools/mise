@@ -458,6 +458,8 @@ pub static SETTINGS_META: Lazy<IndexMap<&'static str, SettingsMeta>> = Lazy::new
                 r#"    "{name}" => SettingsMeta {{
         type_: SettingsType::{meta_type},"#,
             ));
+            let rc = props.get("rc").and_then(|v| v.as_bool()).unwrap_or(false);
+            lines.push(format!("        rc: {rc},"));
             if let Some(description) = props.get("description") {
                 let description = description.as_str().unwrap().to_string();
                 lines.push(format!(
@@ -483,6 +485,8 @@ pub static SETTINGS_META: Lazy<IndexMap<&'static str, SettingsMeta>> = Lazy::new
                     r#"    "{name}.{key}" => SettingsMeta {{
         type_: SettingsType::{meta_type},"#,
                 ));
+                let rc = props.get("rc").and_then(|v| v.as_bool()).unwrap_or(false);
+                lines.push(format!("        rc: {rc},"));
             }
             if let Some(description) = props.get("description") {
                 let description = description.as_str().unwrap().to_string();

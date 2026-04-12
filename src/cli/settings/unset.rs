@@ -1,7 +1,8 @@
 use eyre::Result;
 use toml_edit::DocumentMut;
 
-use crate::config::settings::SettingsFile;
+use crate::cli::settings::set::{settings_path, validate_settings_document};
+use crate::config::settings::{SETTINGS_META, SettingsFile};
 use crate::{config, file};
 
 /// Clears a setting
@@ -25,14 +26,22 @@ impl SettingsUnset {
 }
 
 pub fn unset(mut key: &str, local: bool) -> Result<()> {
-    let path = if local {
+    let meta = SETTINGS_META.get(key);
+    let path = if let Some(meta) = meta {
+        settings_path(meta, local)?
+    } else if local {
         config::local_toml_config_path()
     } else {
         config::global_config_path()
     };
     let raw = file::read_to_string(&path)?;
     let mut config: DocumentMut = raw.parse()?;
-    if let Some(mut settings) = config["settings"].as_table_mut() {
+    let settings = if meta.is_some_and(|m| m.rc) {
+        Some(config.as_table_mut())
+    } else {
+        config["settings"].as_table_mut()
+    };
+    if let Some(mut settings) = settings {
         if let Some((parent_key, child_key)) = key.split_once('.') {
             key = child_key;
             settings = settings
@@ -46,8 +55,11 @@ pub fn unset(mut key: &str, local: bool) -> Result<()> {
                 .unwrap();
         }
         settings.remove(key);
-        // validate
-        let _: SettingsFile = toml::from_str(&config.to_string())?;
+        if let Some(meta) = meta {
+            validate_settings_document(meta, &config.to_string())?;
+        } else {
+            let _: SettingsFile = toml::from_str(&config.to_string())?;
+        }
 
         file::write(&path, config.to_string())?;
     }
