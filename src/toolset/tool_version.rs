@@ -304,13 +304,25 @@ impl ToolVersion {
         // fetching for fully-qualified versions (e.g. "2.3.2") that aren't installed.
         // Prefix versions like "2" still need remote resolution to find e.g. "2.1.0".
         // "latest" also needs remote resolution but is handled in the block above.
-        if settings.prefer_offline() && v.matches('.').count() >= 2 {
+        if settings.prefer_offline() && is_fully_qualified_version(&v) {
             return build(v);
         }
         // First try with date filter (common case)
-        let matches = backend
+        let matches = match backend
             .list_versions_matching_with_opts(config, &v, opts.before_date)
-            .await?;
+            .await
+        {
+            Ok(matches) => matches,
+            Err(err) if !opts.latest_versions && is_fully_qualified_version(&v) => {
+                debug!(
+                    "falling back to pinned version {} for {} after remote resolution failed: {err:#}",
+                    v,
+                    request.ba()
+                );
+                return build(v);
+            }
+            Err(err) => return Err(err),
+        };
         if matches.contains(&v) {
             return build(v);
         }
@@ -482,6 +494,10 @@ fn has_linked_version(ba: &BackendArg) -> bool {
         }
     }
     false
+}
+
+fn is_fully_qualified_version(version: &str) -> bool {
+    version.matches('.').count() >= 2
 }
 
 impl Display for ResolveOptions {

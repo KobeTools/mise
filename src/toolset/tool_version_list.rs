@@ -112,4 +112,29 @@ mod tests {
         env::remove_var("MISE_FAILURE");
         Config::reset().await.unwrap();
     }
+
+    #[tokio::test]
+    async fn test_tool_version_list_pinned_version_falls_back_when_remote_resolution_fails() {
+        env::set_var("MISE_FAILURE", "1");
+        file::remove_all(dirs::CACHE.join("dummy")).unwrap();
+        let config = Config::reset().await.unwrap();
+        let ba: Arc<BackendArg> = Arc::new("dummy".into());
+        let mut tvl = ToolVersionList::new(ba.clone(), ToolSource::Argument);
+        tvl.requests
+            .push(ToolRequest::new(ba, "1.0.0", ToolSource::Argument).unwrap());
+        tvl.resolve(
+            &config,
+            &ResolveOptions {
+                latest_versions: false,
+                use_locked_version: false,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(tvl.versions.len(), 1);
+        assert_eq!(tvl.versions[0].version, "1.0.0");
+        env::remove_var("MISE_FAILURE");
+        Config::reset().await.unwrap();
+    }
 }

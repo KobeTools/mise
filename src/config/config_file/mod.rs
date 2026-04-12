@@ -33,6 +33,7 @@ use indexmap::IndexMap;
 use serde_derive::Deserialize;
 use std::sync::LazyLock as Lazy;
 use tool_versions::ToolVersions;
+use xx::regex;
 
 use super::Config;
 
@@ -264,6 +265,9 @@ pub async fn parse_or_init(path: &Path) -> eyre::Result<Arc<dyn ConfigFile>> {
     };
     let cf = match path.exists() {
         true => parse(&path).await?,
+        false if path.extension().is_some_and(|ext| ext == OsStr::new("toml")) => {
+            Arc::new(MiseToml::init(&path))
+        }
         false => init(&path).await,
     };
     Ok(cf)
@@ -557,12 +561,32 @@ async fn filename_is_idiomatic(file_name: String) -> Option<Vec<Arc<dyn Backend>
     }
 }
 
+fn is_named_mise_toml(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|f| f.to_str())
+        .is_some_and(|f| regex!(r"^\.?mise\.[^.]+(?:\.local)?\.toml$").is_match(f))
+}
+
+fn is_conf_d_toml_path(path: &Path) -> bool {
+    path.extension().is_some_and(|ext| ext == OsStr::new("toml"))
+        && path
+            .parent()
+            .is_some_and(|dir| dir.file_name().is_some_and(|name| name == "conf.d"))
+        && path.parent().and_then(|dir| dir.parent()).is_some_and(|dir| {
+            dir.file_name().is_some_and(|name| name == "mise")
+                && dir.parent()
+                    .is_some_and(|parent| parent.file_name().is_some_and(|name| name == ".config"))
+        })
+}
+
 fn is_known_mise_toml_path(path: &Path) -> bool {
     config::is_global_config(path)
         || config::DEFAULT_CONFIG_FILENAMES
             .iter()
-            .filter(|filename| filename.ends_with(".toml"))
+            .filter(|filename| filename.ends_with(".toml") && !filename.contains('*'))
             .any(|filename| path.ends_with(Path::new(filename)))
+        || is_named_mise_toml(path)
+        || is_conf_d_toml_path(path)
 }
 
 async fn detect_config_file_type(path: &Path) -> Option<ConfigFileType> {
@@ -644,6 +668,18 @@ mod tests {
             Some(ConfigFileType::MiseToml)
         );
         assert_eq!(
+            detect_config_file_type(Path::new("/foo/bar/mise.test.toml")).await,
+            Some(ConfigFileType::MiseToml)
+        );
+        assert_eq!(
+            detect_config_file_type(Path::new("/foo/bar/mise.path.toml")).await,
+            Some(ConfigFileType::MiseToml)
+        );
+        assert_eq!(
+            detect_config_file_type(Path::new("/foo/bar/.config/mise/conf.d/task.toml")).await,
+            Some(ConfigFileType::MiseToml)
+        );
+        assert_eq!(
             detect_config_file_type(&env::MISE_GLOBAL_CONFIG_FILE.clone().unwrap()).await,
             Some(ConfigFileType::MiseToml)
         );
@@ -675,5 +711,14 @@ mod tests {
             result2,
             Path::new("/tmp/trusted/infra-mise.toml-a1b2c3d4e5f67890.monorepo")
         );
+    }
+
+    #[tokio::test]
+    async fn test_parse_or_init_missing_custom_toml_path() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("mise.path.toml");
+        let cf = parse_or_init(&path).await.unwrap();
+        assert_eq!(cf.config_type(), ConfigFileType::MiseToml);
+        assert_eq!(cf.get_path(), path.as_path());
     }
 }
