@@ -987,6 +987,29 @@ parse_env = "set_by_comma"
 rust_type = "BTreeSet<String>"
 type = "SetString"
 
+[idiomatic_version_file_fallback]
+default = false
+description = "Automatically read supported idiomatic version files when no local mise config exists."
+docs = """
+When enabled, mise will fall back to supported idiomatic version files such as
+`.nvmrc`, `.python-version`, or `rust-toolchain.toml` only when there is no
+local `mise.toml`, `.tool-versions`, or equivalent local mise config in the
+current directory hierarchy.
+
+This keeps idiomatic files from competing with explicit local mise configs while
+providing a simpler out-of-the-box experience in config-less repositories.
+
+If `idiomatic_version_file_enable_tools` is set, that explicit tool allowlist
+still takes precedence and this fallback mode is ignored.
+
+This is an early-init setting: it must be set in `.miserc.toml`, environment
+variables, or CLI flags. Setting it in `mise.toml` will have no effect because
+config file discovery has already occurred by the time `mise.toml` is read.
+"""
+env = "MISE_IDIOMATIC_VERSION_FILE_FALLBACK"
+rc = true
+type = "Bool"
+
 [ignored_config_paths]
 default = []
 description = "This is a list of config paths that mise will ignore."
