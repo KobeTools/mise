@@ -577,8 +577,6 @@ async fn detect_config_file_type(path: &Path) -> Option<ConfigFileType> {
         f => {
             if let Some(backends) = filename_is_idiomatic(f.to_string()).await {
                 Some(ConfigFileType::IdiomaticVersion(backends))
-            } else if f.ends_with(".toml") {
-                Some(ConfigFileType::MiseToml)
             } else {
                 None
             }
@@ -623,6 +621,7 @@ mod tests {
     #[tokio::test]
     async fn test_detect_config_file_type() {
         env::set_var("MISE_EXPERIMENTAL", "true");
+        backend::load_tools().await.unwrap();
         assert!(matches!(
             detect_config_file_type(Path::new("/foo/bar/.nvmrc")).await,
             Some(ConfigFileType::IdiomaticVersion(_))
@@ -636,13 +635,21 @@ mod tests {
             Some(ConfigFileType::ToolVersions)
         );
         assert_eq!(
-            detect_config_file_type(Path::new("/foo/bar/mise.toml")).await,
+            detect_config_file_type(Path::new("/foo/bar/.test.mise.toml")).await,
             Some(ConfigFileType::MiseToml)
         );
         assert!(matches!(
             detect_config_file_type(Path::new("/foo/bar/rust-toolchain.toml")).await,
             Some(ConfigFileType::IdiomaticVersion(_))
         ));
+        assert!(matches!(
+            detect_config_file_type(Path::new("/foo/bar/.python-version")).await,
+            Some(ConfigFileType::IdiomaticVersion(_))
+        ));
+        assert_eq!(
+            detect_config_file_type(Path::new("/foo/bar/foo.toml")).await,
+            None
+        );
     }
 
     #[test]
