@@ -265,7 +265,11 @@ pub async fn parse_or_init(path: &Path) -> eyre::Result<Arc<dyn ConfigFile>> {
     };
     let cf = match path.exists() {
         true => parse(&path).await?,
-        false if path.extension().is_some_and(|ext| ext == OsStr::new("toml")) => {
+        false
+            if path
+                .extension()
+                .is_some_and(|ext| ext == OsStr::new("toml")) =>
+        {
             Arc::new(MiseToml::init(&path))
         }
         false => init(&path).await,
@@ -568,15 +572,20 @@ fn is_named_mise_toml(path: &Path) -> bool {
 }
 
 fn is_conf_d_toml_path(path: &Path) -> bool {
-    path.extension().is_some_and(|ext| ext == OsStr::new("toml"))
+    path.extension()
+        .is_some_and(|ext| ext == OsStr::new("toml"))
         && path
             .parent()
             .is_some_and(|dir| dir.file_name().is_some_and(|name| name == "conf.d"))
-        && path.parent().and_then(|dir| dir.parent()).is_some_and(|dir| {
-            dir.file_name().is_some_and(|name| name == "mise")
-                && dir.parent()
-                    .is_some_and(|parent| parent.file_name().is_some_and(|name| name == ".config"))
-        })
+        && path
+            .parent()
+            .and_then(|dir| dir.parent())
+            .is_some_and(|dir| {
+                dir.file_name().is_some_and(|name| name == "mise")
+                    && dir.parent().is_some_and(|parent| {
+                        parent.file_name().is_some_and(|name| name == ".config")
+                    })
+            })
 }
 
 fn is_known_mise_toml_path(path: &Path) -> bool {

@@ -1,70 +1,144 @@
 # Local Development Guide - mise
 
-This guide explains how to set up and maintain a local development environment for the `mise` repository on Windows.
+This guide covers the local setup and verification steps that are most useful
+before pushing changes to `mise`.
 
----
+## Install the Local Git Pre-Commit Hook
 
-## 🏁 Windows Setup
-*Perform these steps to ensure your environment can handle the `mise` build scripts.*
+`mise` already defines a `pre-commit` task that runs `mise run lint`. Install
+the local git hook once per clone:
 
-### 1. System Compilers & Toolchain
-Rust on Windows requires the MSVC linker. Use WinGet to install the headless build tools:
+```sh
+mise generate git-pre-commit --write --task=pre-commit
+```
+
+That writes `.git/hooks/pre-commit` and runs the lint task every time you
+commit.
+
+## macOS Setup
+
+### System dependencies
+
+```sh
+xcode-select --install
+brew install git
+curl https://sh.rustup.rs -sSf | sh
+rustup default stable
+```
+
+### Build from source
+
+```sh
+git clone https://github.com/jdx/mise.git
+cd mise
+cargo build --all-features
+cargo install --path .
+```
+
+The first build bootstraps a number of external tools, so it can take a while.
+
+### Fast local iteration
+
+```sh
+cargo run -- ls
+```
+
+Use this for quick logic checks without reinstalling the binary globally.
+
+## Windows Setup
+
+### System compilers and toolchain
+
+Rust on Windows requires the MSVC linker. Use WinGet to install the headless
+build tools:
+
 ```powershell
-# Install C++ Build Tools
 winget install --id Microsoft.VisualStudio.2022.BuildTools --override "--passive --wait --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
-
-# Install Rust
+winget install Git.Git
 winget install Rustlang.Rustup
 rustup default stable
 ```
 
-### 2. System Helpers
+### Build from source
+
 ```powershell
-# Install Git
-winget install Git.Git
-```
-
----
-
-## 🚀 Building from Source
-
-### 1. Clone the Repository
-```powershell
-git clone [https://github.com/jdx/mise.git](https://github.com/jdx/mise.git)
+git clone https://github.com/jdx/mise.git
 cd mise
-```
-
-### 2. Build and Install
-Running this command will compile the binary in release mode and move it to your global Cargo directory (`~/.cargo/bin`).
-```powershell
+cargo build --all-features
 cargo install --path .
 ```
-> **Note:** The first build triggers a bootstrap phase where `mise` downloads ~25 external tools (like `jq`, `gh`, etc.). This can be slow on Windows due to NTFS file I/O and real-time antivirus scanning.
 
----
+The first build bootstraps a number of external tools, so it can take a while,
+especially on NTFS or when antivirus is scanning new files.
 
-## ⚠️ Windows-Specific Troubleshooting
+### PATH priority conflict
 
-### 1. The PATH Priority Conflict (Critical)
-If you already have a version of `mise` installed via WinGet or a separate installer, it uses **Shims** to manage commands. If you build `mise` manually, the existing shims might still point to the old version or fail with `cannot find binary path`.
+If you already have `mise` installed from WinGet or another installer, move
+`C:\Users\<USER>\.cargo\bin` to the top of your user `Path` so your local build
+is found before any older shim-based install.
 
-**The Fix:** 1. Open your Environment Variables.
-2. Move `C:\Users\<USER>\.cargo\bin` to the **very top** of your User Path. 
-3. This ensures Windows finds your locally built `mise.exe` before it hits the `mise` shims folder.
+### Fast local iteration
 
-### 2. Development "Fast" Check
-If you are making small changes to the code and don't want to wait for a 10-minute release build, use the debug runner:
 ```powershell
 cargo run -- ls
 ```
-This is much faster for testing logic changes but does not install the binary globally.
 
----
+## Lint Before You Push
 
-## 🔍 Verification
-After the installation finishes, open a **new** terminal window and run:
+The GitHub `lint` job runs `mise run lint`. If that fails on `cargo-fmt`, fix
+the formatting locally and re-run the full lint task:
+
+```sh
+cargo fmt --all
+mise run lint
+```
+
+On Windows, run the same commands from PowerShell:
+
+```powershell
+cargo fmt --all
+mise run lint
+```
+
+## Commands That Best Match GitHub Checks
+
+These are the first commands to run before relying on CI:
+
+```sh
+cargo test --all-features
+./e2e/run_test cli/test_use
+./e2e/run_test cli/test_unuse
+./e2e/run_test tasks/test_task_ls
+./e2e/run_test tasks/test_task_ubi_autoinstall
+```
+
+If you want broader coverage, run the full E2E suite:
+
+```sh
+mise run test:e2e
+```
+
+Windows has its own PowerShell E2E runner:
+
+```powershell
+cargo test --all-features
+pwsh e2e-win\run.ps1
+pwsh e2e-win\run.ps1 task
+```
+
+## Verify the Binary in a Fresh Shell
+
+Open a new terminal after installation and verify the binary you are actually
+running:
+
+```sh
+command -v mise
+mise --version
+```
+
+On Windows:
+
 ```powershell
 where.exe mise
 mise --version
 ```
-*The version date should reflect the current day of your build.*
