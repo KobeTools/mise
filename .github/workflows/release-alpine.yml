@@ -26,10 +26,13 @@ jobs:
     container: ghcr.io/jdx/mise:alpine@sha256:f3bb475486f9ab7bd49ad531400d97eac0c9b82e1339d841906f8886b085c541
     timeout-minutes: 60
     if: |
-      (github.event_name == 'release' && 
-       startsWith(github.event.release.tag_name, 'v') && 
-       endsWith(github.event.release.tag_name, '0')) ||
-      (github.event_name == 'workflow_dispatch')
+      github.repository == 'jdx/mise' &&
+      (
+        (github.event_name == 'release' &&
+         startsWith(github.event.release.tag_name, 'v') &&
+         endsWith(github.event.release.tag_name, '0')) ||
+        github.event_name == 'workflow_dispatch'
+      )
     steps:
       - name: Checkout repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4

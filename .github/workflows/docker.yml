@@ -16,6 +16,7 @@ env:
 
 jobs:
   docker:
+    if: github.repository == 'jdx/mise'
     name: docker-${{ matrix.flavor }}
     strategy:
       fail-fast: false

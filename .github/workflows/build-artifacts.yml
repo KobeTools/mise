@@ -1,0 +1,49 @@
+name: Build artifacts
+
+# Lightweight release-style binaries for forks and CI (no signing, no CDN, no GitHub Release).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact: mise-linux-x64
+            cmd: cargo build --locked --release --all-features
+            path: target/release/mise
+          - os: macos-latest
+            artifact: mise-macos-arm64
+            cmd: cargo build --locked --release --all-features
+            path: target/release/mise
+          - os: windows-latest
+            artifact: mise-windows-x64
+            cmd: cargo build --locked --release --no-default-features --features rustls-native-roots,vfox/vendored-lua,self_update
+            path: target/release/mise.exe
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          shared-key: build-artifacts-${{ matrix.os }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - run: ${{ matrix.cmd }}
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.path }}
+          if-no-files-found: error

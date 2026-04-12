@@ -29,10 +29,13 @@ jobs:
       id-token: write
       contents: read
     if: |
-      (github.event_name == 'release' &&
-       startsWith(github.event.release.tag_name, 'v') &&
-       !github.event.release.prerelease) ||
-      github.event_name == 'workflow_dispatch'
+      github.repository == 'jdx/mise' &&
+      (
+        (github.event_name == 'release' &&
+         startsWith(github.event.release.tag_name, 'v') &&
+         !github.event.release.prerelease) ||
+        github.event_name == 'workflow_dispatch'
+      )
     steps:
       - name: Checkout repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
