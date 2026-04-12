@@ -68,6 +68,11 @@ pub fn get_override_tool_versions_filenames() -> Option<&'static Vec<String>> {
     get().override_tool_versions_filenames.as_ref()
 }
 
+/// Get the idiomatic_version_file_fallback value from miserc, if set.
+pub fn get_idiomatic_version_file_fallback() -> Option<&'static bool> {
+    get().idiomatic_version_file_fallback.as_ref()
+}
+
 /// Render any Tera template syntax in miserc content before TOML parsing.
 /// Uses a minimal context that is safe to build before the main config is loaded:
 /// - `env` – OS environment variables (from PRISTINE_ENV)
@@ -161,6 +166,9 @@ fn merge_settings(target: &mut MisercSettings, source: MisercSettings) {
     }
     if source.override_tool_versions_filenames.is_some() {
         target.override_tool_versions_filenames = source.override_tool_versions_filenames;
+    }
+    if source.idiomatic_version_file_fallback.is_some() {
+        target.idiomatic_version_file_fallback = source.idiomatic_version_file_fallback;
     }
 }
 

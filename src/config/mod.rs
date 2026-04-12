@@ -124,8 +124,9 @@ impl Config {
     #[async_backtrace::framed]
     pub async fn load() -> Result<Arc<Self>> {
         backend::load_tools().await?;
+        let dirs = all_dirs().unwrap_or_default();
         let idiomatic_files = measure!("config::load idiomatic_files", {
-            load_idiomatic_filenames().await
+            load_idiomatic_filenames(&dirs).await
         });
         let config_filenames = idiomatic_files
             .keys()
@@ -929,15 +930,18 @@ fn find_monorepo_config(config_files: &ConfigMap) -> Option<&Arc<dyn ConfigFile>
         .find(|cf| cf.experimental_monorepo_root() == Some(true))
 }
 
-async fn load_idiomatic_filenames() -> BTreeMap<String, Vec<String>> {
-    let enable_tools = Settings::get().idiomatic_version_file_enable_tools.clone();
-    if enable_tools.is_empty() {
+async fn load_idiomatic_filenames(dirs: &[PathBuf]) -> BTreeMap<String, Vec<String>> {
+    let settings = Settings::get();
+    let enable_tools = settings.idiomatic_version_file_enable_tools.clone();
+    let use_fallback = should_use_idiomatic_fallback(
+        enable_tools.is_empty(),
+        *env::MISE_IDIOMATIC_VERSION_FILE_FALLBACK,
+        has_local_config_files(dirs),
+    );
+    if enable_tools.is_empty() && !use_fallback {
         return BTreeMap::new();
     }
-    if !Settings::get()
-        .idiomatic_version_file_disable_tools
-        .is_empty()
-    {
+    if !settings.idiomatic_version_file_disable_tools.is_empty() {
         deprecated!(
             "idiomatic_version_file_disable_tools",
             "is deprecated, use idiomatic_version_file_enable_tools instead"
@@ -946,8 +950,9 @@ async fn load_idiomatic_filenames() -> BTreeMap<String, Vec<String>> {
     let mut jset = JoinSet::new();
     for tool in backend::list() {
         let enable_tools = enable_tools.clone();
+        let use_fallback = use_fallback;
         jset.spawn(async move {
-            if !enable_tools.contains(tool.id()) {
+            if !use_fallback && !enable_tools.contains(tool.id()) {
                 return vec![];
             }
             match tool.idiomatic_filenames().await {
@@ -977,6 +982,20 @@ async fn load_idiomatic_filenames() -> BTreeMap<String, Vec<String>> {
             .push(plugin);
     }
     idiomatic_filenames
+}
+
+fn should_use_idiomatic_fallback(
+    enable_tools_is_empty: bool,
+    fallback_enabled: bool,
+    has_local_config: bool,
+) -> bool {
+    enable_tools_is_empty && fallback_enabled && !has_local_config
+}
+
+fn has_local_config_files(dirs: &[PathBuf]) -> bool {
+    dirs.iter()
+        .flat_map(|dir| config_files_in_dir(dir))
+        .any(|path| !is_global_config(&path))
 }
 
 static LOCAL_CONFIG_FILENAMES: Lazy<IndexSet<&'static str>> = Lazy::new(|| {
@@ -1192,15 +1211,13 @@ pub async fn load_config_hierarchy_from_dir(
         return Ok((vec![], BTreeMap::new()));
     }
 
-    let idiomatic_files = load_idiomatic_filenames().await;
+    let dirs = all_dirs_from(start_dir)?;
+    let idiomatic_files = load_idiomatic_filenames(&dirs).await;
     let config_filenames: Vec<String> = idiomatic_files
         .keys()
         .cloned()
         .chain(DEFAULT_CONFIG_FILENAMES.iter().cloned())
         .collect();
-
-    // Get all directories from start_dir up to root/ceiling
-    let dirs = all_dirs_from(start_dir)?;
 
     let mut config_files = dirs
         .iter()
@@ -2572,5 +2589,13 @@ vars = { target = "linux" }
         assert_eq!(tasks[0].name, "build");
         assert_eq!(tasks[0].description, "linux");
         Ok(())
+    }
+
+    #[test]
+    fn test_should_use_idiomatic_fallback() {
+        assert!(should_use_idiomatic_fallback(true, true, false));
+        assert!(!should_use_idiomatic_fallback(false, true, false));
+        assert!(!should_use_idiomatic_fallback(true, false, false));
+        assert!(!should_use_idiomatic_fallback(true, true, true));
     }
 }

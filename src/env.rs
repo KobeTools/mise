@@ -294,6 +294,13 @@ pub static MISE_CEILING_PATHS: Lazy<HashSet<PathBuf>> = Lazy::new(|| {
         })
         .unwrap_or_default()
 });
+pub static MISE_IDIOMATIC_VERSION_FILE_FALLBACK: Lazy<bool> = Lazy::new(|| {
+    var("MISE_IDIOMATIC_VERSION_FILE_FALLBACK")
+        .ok()
+        .map(|_| var_is_true("MISE_IDIOMATIC_VERSION_FILE_FALLBACK"))
+        .or_else(|| miserc::get_idiomatic_version_file_fallback().copied())
+        .unwrap_or_default()
+});
 pub static MISE_USE_TOML: Lazy<bool> = Lazy::new(|| !var_is_false("MISE_USE_TOML"));
 pub static MISE_LIST_ALL_VERSIONS: Lazy<bool> = Lazy::new(|| var_is_true("MISE_LIST_ALL_VERSIONS"));
 pub static ARGV0: Lazy<String> = Lazy::new(|| ARGS.read().unwrap()[0].to_string());
