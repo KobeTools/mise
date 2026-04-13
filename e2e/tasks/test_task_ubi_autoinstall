@@ -2,6 +2,15 @@
 
 # Test that ubi tool options are preserved during auto-install via `mise run`
 # Reproduces: https://github.com/jdx/mise/discussions/6582
+#
+# This hits the public GitHub Releases API. Runners often get non-404 failures
+# (403/429) on the first tag candidate; ubi then aborts before trying fallbacks,
+# so the job flakes. Skip in CI; run locally with: EXCLUDE_FROM_CI= ./e2e/run_test tasks/test_task_ubi_autoinstall
+
+if [ -n "${EXCLUDE_FROM_CI:-}" ] || [ -n "${GITHUB_ACTIONS:-}" ]; then
+	echo "Skipping tasks/test_task_ubi_autoinstall in CI (GitHub API flakiness for ubi release resolution)"
+	exit 0
+fi
 
 cat <<EOF >mise.toml
 [tools]

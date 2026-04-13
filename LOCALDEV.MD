@@ -1,56 +1,57 @@
 # Local Development Guide - mise
 
-This guide covers the local setup and verification steps that are most useful
-before pushing changes to `mise`.
+This guide covers the chronological setup, development workflow, and verification steps required to contribute to `mise` locally.
 
-## Install the Local Git Pre-Commit Hook
+---
 
-`mise` already defines a `pre-commit` task that runs `mise run lint`. Install
-the local git hook once per clone:
+## 1. Environment Setup (macOS)
 
-```sh
-mise generate git-pre-commit --write --task=pre-commit
-```
-
-That writes `.git/hooks/pre-commit` and runs the lint task every time you
-commit.
-
-## macOS Setup
-
-### System dependencies
-
+### System Dependencies
 ```sh
 xcode-select --install
 brew install git
-curl https://sh.rustup.rs -sSf | sh
+curl [https://sh.rustup.rs](https://sh.rustup.rs) -sSf | sh
 rustup default stable
 ```
 
-### Build from source
-
+### Build from Source
 ```sh
-git clone https://github.com/jdx/mise.git
+git clone [https://github.com/KobeTools/mise.git](https://github.com/KobeTools/mise.git)
 cd mise
 cargo build --all-features
 cargo install --path .
 ```
+> *Note: The first build bootstraps a number of external tools, so it can take a while.*
 
-The first build bootstraps a number of external tools, so it can take a while.
+### Shell Configuration & Path Tuning
+To use your local build efficiently and prevent duplicate PATH entries, configure your shell to use `mise`'s dynamic activation rather than static shims. Add the following to your `~/.zshrc`:
 
-### Fast local iteration
+```zsh
+# Ensure $path is treated as an array of unique values
+typeset -U path
+path=("$HOME/.local/bin" "$HOME/.cargo/bin" $path)
+export PATH
 
-```sh
-cargo run -- ls
+# Official Mise Activation (dynamic PATH rewriting)
+if command -v mise >/dev/null; then
+  eval "$(mise activate zsh)"
+fi
 ```
 
-Use this for quick logic checks without reinstalling the binary globally.
+### Verification
+Reload your shell (`source ~/.zshrc`), then verify you are running the local binary:
+```sh
+command -v mise
+mise doctor
+```
+For an optimized macOS build, `doctor` should output: `activated: yes` and `shims_on_path: no`.
 
-## Windows Setup
+---
 
-### System compilers and toolchain
+## 2. Environment Setup (Windows)
 
-Rust on Windows requires the MSVC linker. Use WinGet to install the headless
-build tools:
+### System Compilers & Toolchain
+Rust on Windows requires the MSVC linker. Install the headless build tools:
 
 ```powershell
 winget install --id Microsoft.VisualStudio.2022.BuildTools --override "--passive --wait --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
@@ -59,50 +60,75 @@ winget install Rustlang.Rustup
 rustup default stable
 ```
 
-### Build from source
-
+### Build from Source
 ```powershell
-git clone https://github.com/jdx/mise.git
+git clone [https://github.com/KobeTools/mise.git](https://github.com/KobeTools/mise.git)
 cd mise
 cargo build --all-features
 cargo install --path .
 ```
+> *Note: Windows builds may take longer due to NTFS overhead and antivirus scanning during the bootstrap phase.*
 
-The first build bootstraps a number of external tools, so it can take a while,
-especially on NTFS or when antivirus is scanning new files.
-
-### PATH priority conflict
-
-If you already have `mise` installed from WinGet or another installer, move
-`C:\Users\<USER>\.cargo\bin` to the top of your user `Path` so your local build
-is found before any older shim-based install.
-
-### Fast local iteration
+### Compiling the Native Shim
+Unlike official installers, `cargo install` only moves the main `mise.exe`. To prevent structural warnings in `mise doctor`, manually compile and move the native Windows shim helper:
 
 ```powershell
+cargo build --release -p mise-shim
+copy .\target\release\mise-shim.exe $HOME\.cargo\bin\
+```
+
+### PATH Priority & Profile Activation
+1. **Path Priority:** Move `C:\Users\<USER>\.cargo\bin` to the very top of your user `Path` environment variable. This ensures Windows finds your local build before it hits any shim folders.
+2. **Profile Setup:** Add the dynamic activation hook to your PowerShell `$PROFILE`:
+
+```powershell
+if (Get-Command mise -ErrorAction SilentlyContinue) {
+    mise activate pwsh | Out-String | Invoke-Expression
+}
+```
+
+### Verification
+Restart your PowerShell terminal and initialize the shims for the first time:
+
+```powershell
+mise reshim
+where.exe mise
+mise doctor
+```
+`where.exe` should list your `.cargo\bin` path first, and `doctor` should report **"No problems found"**.
+
+---
+
+## 3. Development Workflow
+
+Once your environment is built and activated, use these tools to iterate on the codebase.
+
+### Fast Local Iteration
+Use the cargo runner for quick logic checks without reinstalling the binary globally:
+```sh
 cargo run -- ls
 ```
 
-## Lint Before You Push
+### Install the Local Git Pre-Commit Hook
+`mise` defines a `pre-commit` task that runs `mise run lint`. Install this hook so it runs automatically before you commit code:
+```sh
+mise generate git-pre-commit --write --task=pre-commit
+```
 
-The GitHub `lint` job runs `mise run lint`. If that fails on `cargo-fmt`, fix
-the formatting locally and re-run the full lint task:
+---
+
+## 4. Pre-Push Validation
+
+### Lint Before You Push
+The GitHub `lint` job runs `mise run lint`. If that fails on `cargo-fmt`, fix the formatting locally and re-run the full lint task:
 
 ```sh
 cargo fmt --all
 mise run lint
 ```
 
-On Windows, run the same commands from PowerShell:
-
-```powershell
-cargo fmt --all
-mise run lint
-```
-
-## Commands That Best Match GitHub Checks
-
-These are the first commands to run before relying on CI:
+### Commands That Best Match GitHub Checks
+Run these specific tests locally before relying on CI:
 
 ```sh
 cargo test --all-features
@@ -114,31 +140,14 @@ cargo test --all-features
 
 If you want broader coverage, run the full E2E suite:
 
+**macOS/Linux:**
 ```sh
 mise run test:e2e
 ```
 
-Windows has its own PowerShell E2E runner:
-
+**Windows (PowerShell):**
 ```powershell
 cargo test --all-features
 pwsh e2e-win\run.ps1
 pwsh e2e-win\run.ps1 task
-```
-
-## Verify the Binary in a Fresh Shell
-
-Open a new terminal after installation and verify the binary you are actually
-running:
-
-```sh
-command -v mise
-mise --version
-```
-
-On Windows:
-
-```powershell
-where.exe mise
-mise --version
 ```
